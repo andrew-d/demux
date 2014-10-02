@@ -1,0 +1,18 @@
+{
+	"ImportPath": "github.com/andrew-d/demux",
+	"GoVersion": "go1.3.3",
+	"Packages": [
+		"./..."
+	],
+	"Deps": [
+		{
+			"ImportPath": "github.com/ogier/pflag",
+			"Rev": "e4f7d00f344b0954fa3791a8527d10ba7334eceb"
+		},
+		{
+			"ImportPath": "gopkg.in/inconshreveable/log15.v2",
+			"Comment": "v2.4",
+			"Rev": "574f2561514e06d66f532fce5c7f776f7c7939b3"
+		}
+	]
+}
