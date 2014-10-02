@@ -57,10 +57,14 @@ func (p *Proxy) Start() {
 	}
 
 	p.logger.Debug("Protocol detected", "name", name)
+	dest := *p.ProtoDestinations[name]
 
 	// Dial the backend.
-	dest := *p.ProtoDestinations[name]
-	p.localConn, err = net.Dial("tcp", dest)
+	if flagUseTransparent {
+		p.localConn, err = openTransparent(dest)
+	} else {
+		p.localConn, err = net.Dial("tcp", dest)
+	}
 	if err != nil {
 		p.logger.Error("Error dialing backend", "err", err)
 		return
