@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"sync/atomic"
 
 	log "gopkg.in/inconshreveable/log15.v2"
 )
@@ -12,7 +13,7 @@ type Proxy struct {
 	localConn  net.Conn
 	remoteConn net.Conn
 	logger     log.Logger
-	errored    bool
+	errored    uint32
 	errChan    chan struct{}
 
 	// Config
@@ -160,7 +161,9 @@ func (p *Proxy) pipe(src, dest net.Conn) {
 }
 
 func (p *Proxy) markError(msg string, err error) {
-	if p.errored {
+	if !atomic.CompareAndSwapUint32(&p.errored, 0, 1) {
+		// We didn't swap, which means that the value must be a value other than 0,
+		// and thus we aren't the first to execute this.  Just exit.
 		return
 	}
 
@@ -168,6 +171,5 @@ func (p *Proxy) markError(msg string, err error) {
 		p.logger.Error(msg, "err", err)
 	}
 
-	p.errored = true
 	p.errChan <- struct{}{}
 }
