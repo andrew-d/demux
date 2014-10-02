@@ -19,7 +19,7 @@ func (p OpenVpnProtocol) Detect(buf []byte) (bool, error) {
 	// TODO: this is rather fragile - it relies on us receiving the entirety of
 	// the first packet immediately
 	plen := int(binary.BigEndian.Uint16(buf[0:2]))
-	return plen == len(buf) - 2, nil
+	return plen == len(buf)-2, nil
 }
 
 func (p OpenVpnProtocol) Name() string {
