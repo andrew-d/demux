@@ -80,6 +80,8 @@ func (p *Proxy) Start() {
 		return
 	}
 
+	p.logger.Debug("Initial write completed, started copying data...")
+
 	// Start copying between the two connections
 	go p.pipe(p.localConn, p.remoteConn)
 	go p.pipe(p.remoteConn, p.localConn)

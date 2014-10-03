@@ -44,6 +44,13 @@ func openTransparent(backendAddr, originalAddr *net.TCPAddr) (net.Conn, error) {
 		return nil, err
 	}
 
+	// Set TCP_NODELAY option (default on Go sockets)
+	err = os.NewSyscallError("setsockopt",
+		syscall.SetsockoptInt(fd.sysfd, syscall.IPPROTO_TCP, syscall.TCP_NODELAY, 1))
+	if err != nil {
+		return nil, err
+	}
+
 	family = tcpAddrFamily(originalAddr)
 	laddr, err := ipToSockaddr(family, originalAddr.IP, originalAddr.Port, originalAddr.Zone)
 	if err != nil {
@@ -54,14 +61,27 @@ func openTransparent(backendAddr, originalAddr *net.TCPAddr) (net.Conn, error) {
 		return nil, err
 	}
 
-	family = tcpAddrFamily(backendAddr)
-	raddr, err := ipToSockaddr(family, backendAddr.IP, backendAddr.Port, backendAddr.Zone)
+	raddr, err := ipToSockaddr(
+		tcpAddrFamily(backendAddr),
+		backendAddr.IP,
+		backendAddr.Port,
+		backendAddr.Zone)
 	if err != nil {
 		return nil, err
 	}
+
+	rootLog.Debug("connecting...", "addr", raddr, "backendAddr", backendAddr)
 	if err := syscall.Connect(s, raddr); err != nil {
 		return nil, err
 	}
+	rootLog.Debug("connected")
+
+	// Now that we're connected, make the socket nonblocking like Go expects.
+	if err = syscall.SetNonblock(s, true); err != nil {
+		rootLog.Debug("err: nonblock")
+		return nil, err
+	}
+	rootLog.Debug("set as nonblocking")
 
 	// Convert socket to *os.File
 	// Note that net.FileConn() returns a copy of the socket, so we close this
@@ -72,9 +92,11 @@ func openTransparent(backendAddr, originalAddr *net.TCPAddr) (net.Conn, error) {
 	// Make a net.Conn from our file
 	c, err := net.FileConn(f)
 	if err != nil {
+		rootLog.Debug("err: FileConn")
 		return nil, err
 	}
 
+	rootLog.Debug("Created socket to backend")
 	return c, nil
 }
 
@@ -82,7 +104,8 @@ func openTransparent(backendAddr, originalAddr *net.TCPAddr) (net.Conn, error) {
 // Wrapper around the socket system call that marks the returned file
 // descriptor as nonblocking and close-on-exec.
 func sysSocket(family, sotype, proto int) (int, error) {
-	s, err := syscall.Socket(family, sotype|syscall.SOCK_NONBLOCK|syscall.SOCK_CLOEXEC, proto)
+	s, err := syscall.Socket(family, sotype|syscall.SOCK_CLOEXEC, proto)
+
 	// On Linux the SOCK_NONBLOCK and SOCK_CLOEXEC flags were
 	// introduced in 2.6.27 kernel and on FreeBSD both flags were
 	// introduced in 10 kernel. If we get an EINVAL error on Linux
