@@ -8,8 +8,8 @@ import (
 	"syscall"
 )
 
-func openTransparent(addr string) (net.Conn, error) {
-	family := syscall.AF_INET
+func openTransparent(backendAddr, originalAddr *net.TCPAddr) (net.Conn, error) {
+	family := tcpAddrFamily(backendAddr)
 	sotype := syscall.SOCK_STREAM
 	proto := syscall.IPPROTO_TCP
 	ipv6only := false
@@ -37,23 +37,27 @@ func openTransparent(addr string) (net.Conn, error) {
 		return nil, err
 	}
 
-	// TODO: set IP_TRANSPARENT socket option
+	// Set IP_TRANSPARENT socket option
+	err = os.NewSyscallError("setsockopt",
+		syscall.SetsockoptInt(s, syscall.IPPROTO_IP, syscall.IP_TRANSPARENT, 1))
+	if err != nil {
+		return nil, err
+	}
 
-	// TODO: make this work
-	// TODO: support IPv4 and IPv6
-	laddr := &syscall.SockaddrInet4{
-		Port: 0,
-		Addr: [4]byte{0, 0, 0, 0},
+	family = tcpAddrFamily(originalAddr)
+	laddr, err := ipToSockaddr(family, originalAddr.IP, originalAddr.Port, originalAddr.Zone)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := syscall.Bind(s, laddr); err != nil {
 		return nil, err
 	}
 
-	// TODO: make this work
-	raddr := &syscall.SockaddrInet4{
-		Port: 0,
-		Addr: [4]byte{0, 0, 0, 0},
+	family = tcpAddrFamily(backendAddr)
+	raddr, err := ipToSockaddr(family, backendAddr.IP, backendAddr.Port, backendAddr.Zone)
+	if err != nil {
+		return nil, err
 	}
 	if err := syscall.Connect(s, raddr); err != nil {
 		return nil, err
@@ -112,4 +116,85 @@ func boolint(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// NOTE: Taken from the Go source: src/net/tcpsock_posix.go
+func tcpAddrFamily(a *net.TCPAddr) int {
+	if a == nil || len(a.IP) <= net.IPv4len {
+		return syscall.AF_INET
+	}
+	if a.IP.To4() != nil {
+		return syscall.AF_INET
+	}
+	return syscall.AF_INET6
+}
+
+// NOTE: Taken from the Go source: src/net/ipsock_posix.go
+func ipToSockaddr(family int, ip net.IP, port int, zone string) (syscall.Sockaddr, error) {
+	switch family {
+	case syscall.AF_INET:
+		if len(ip) == 0 {
+			ip = net.IPv4zero
+		}
+		if ip = ip.To4(); ip == nil {
+			return nil, net.InvalidAddrError("non-IPv4 address")
+		}
+		sa := new(syscall.SockaddrInet4)
+		for i := 0; i < net.IPv4len; i++ {
+			sa.Addr[i] = ip[i]
+		}
+		sa.Port = port
+		return sa, nil
+	case syscall.AF_INET6:
+		if len(ip) == 0 {
+			ip = net.IPv6zero
+		}
+		// IPv4 callers use 0.0.0.0 to mean "announce on any available address".
+		// In IPv6 mode, Linux treats that as meaning "announce on 0.0.0.0",
+		// which it refuses to do.  Rewrite to the IPv6 unspecified address.
+		if ip.Equal(net.IPv4zero) {
+			ip = net.IPv6zero
+		}
+		if ip = ip.To16(); ip == nil {
+			return nil, net.InvalidAddrError("non-IPv6 address")
+		}
+		sa := new(syscall.SockaddrInet6)
+		for i := 0; i < net.IPv6len; i++ {
+			sa.Addr[i] = ip[i]
+		}
+		sa.Port = port
+		sa.ZoneId = uint32(zoneToInt(zone))
+		return sa, nil
+	}
+	return nil, net.InvalidAddrError("unexpected socket family")
+}
+
+func zoneToInt(zone string) int {
+	if zone == "" {
+		return 0
+	}
+	if ifi, err := net.InterfaceByName(zone); err == nil {
+		return ifi.Index
+	}
+	n, _, _ := dtoi(zone, 0)
+	return n
+}
+
+// Bigger than we need, not too big to worry about overflow
+const big = 0xFFFFFF
+
+// Decimal to integer starting at &s[i0].
+// Returns number, new offset, success.
+func dtoi(s string, i0 int) (n int, i int, ok bool) {
+	n = 0
+	for i = i0; i < len(s) && '0' <= s[i] && s[i] <= '9'; i++ {
+		n = n*10 + int(s[i]-'0')
+		if n >= big {
+			return 0, i, false
+		}
+	}
+	if i == i0 {
+		return 0, i, false
+	}
+	return n, i, true
 }

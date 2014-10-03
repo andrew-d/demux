@@ -55,9 +55,9 @@ func main() {
 
 	// For each registered protocol, we add the corresponding flags for its
 	// destination.
-	protoDestinations := make(map[string]*string)
+	protocolFlags := make(map[string]*string)
 	for name, _ := range protocols {
-		protoDestinations[name] = flag.String(name+"-destination", "",
+		protocolFlags[name] = flag.String(name+"-destination", "",
 			"destination to forward "+name+" traffic to")
 	}
 
@@ -70,9 +70,21 @@ func main() {
 
 	// Find out what we've got enabled
 	enabledProtocols := []Protocol{}
+	protoDestinations := make(map[string]*net.TCPAddr)
 	descString := ""
-	for name, flag := range protoDestinations {
+	for name, flag := range protocolFlags {
 		if len(*flag) > 0 {
+			// Validate that we can parse this address
+			addr, err := net.ResolveTCPAddr("tcp", *flag)
+			if err != nil {
+				log.Crit("Invalid TCP address",
+					"addr", *flag,
+					"err", err,
+				)
+				return
+			}
+
+			protoDestinations[name] = addr
 			enabledProtocols = append(enabledProtocols, protocols[name])
 			descString += name + ","
 		}

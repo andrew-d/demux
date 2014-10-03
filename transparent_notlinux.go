@@ -6,7 +6,7 @@ import (
 	"net"
 )
 
-func openTransparent(addr string) (net.Conn, error) {
+func openTransparent(backendAddr, originalAddr *net.TCPAddr) (net.Conn, error) {
 	// Not supported, so just open regularly
-	return net.Dial("tcp", addr)
+	return net.DialTCP("tcp", nil, backendAddr)
 }

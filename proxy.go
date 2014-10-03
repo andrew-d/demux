@@ -18,7 +18,7 @@ type Proxy struct {
 
 	// Config
 	EnabledProtocols  []Protocol
-	ProtoDestinations map[string]*string
+	ProtoDestinations map[string]*net.TCPAddr
 }
 
 var (
@@ -57,21 +57,20 @@ func (p *Proxy) Start() {
 	}
 
 	p.logger.Debug("Protocol detected", "name", name)
-	dest := *p.ProtoDestinations[name]
+	dest := p.ProtoDestinations[name]
 
 	// Dial the backend.
 	if flagUseTransparent {
-		p.localConn, err = openTransparent(dest)
+		remoteAddr := p.remoteConn.RemoteAddr().(*net.TCPAddr)
+		p.localConn, err = openTransparent(dest, remoteAddr)
 	} else {
-		p.localConn, err = net.Dial("tcp", dest)
+		p.localConn, err = net.DialTCP("tcp", nil, dest)
 	}
 	if err != nil {
 		p.logger.Error("Error dialing backend", "err", err)
 		return
 	}
 	defer p.localConn.Close()
-
-	// TODO: transparent support
 
 	// Copy our initial buffer to the backend.
 	// TODO: handle not-full write
