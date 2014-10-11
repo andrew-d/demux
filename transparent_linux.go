@@ -46,7 +46,7 @@ func openTransparent(backendAddr, originalAddr *net.TCPAddr) (net.Conn, error) {
 
 	// Set TCP_NODELAY option (default on Go sockets)
 	err = os.NewSyscallError("setsockopt",
-		syscall.SetsockoptInt(fd.sysfd, syscall.IPPROTO_TCP, syscall.TCP_NODELAY, 1))
+		syscall.SetsockoptInt(s, syscall.IPPROTO_TCP, syscall.TCP_NODELAY, 1))
 	if err != nil {
 		return nil, err
 	}
