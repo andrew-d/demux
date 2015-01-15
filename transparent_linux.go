@@ -8,6 +8,35 @@ import (
 	"syscall"
 )
 
+/*
+
+Steps to get transparent proxying working on Linux:
+
+1) Run these commands (as root):
+
+	iptables -t mangle -N DEMUX
+	iptables -t mangle -A DEMUX --jump MARK --set-mark 0x1
+	iptables -t mangle -A DEMUX --jump ACCEPT
+	ip rule add fwmark 0x1 lookup 100
+	ip route add local 0.0.0.0/0 dev lo table 100
+
+2) Run the following commands - note that there's one for each interface/port
+   that you forward to:
+
+	iptables -t mangle -A OUTPUT --protocol tcp --out-interface eth0 --sport 22 --jump DEMUX
+	iptables -t mangle -A OUTPUT --protocol tcp --out-interface eth0 --sport 8080 --jump DEMUX
+
+3) Finally, run demux (needs to be as root to use transparent proxying):
+
+	sudo ./demux -p 5555 --transparent=true \
+				 --http-destination=<eth0 address>:8080 \
+				 --ssh-destination=<eth0 address>:22
+
+   Note that the various destination addresses must be specified with the same
+   address as the interface you gave in step 2.
+
+*/
+
 func openTransparent(backendAddr, originalAddr *net.TCPAddr) (net.Conn, error) {
 	family := tcpAddrFamily(backendAddr)
 	sotype := syscall.SOCK_STREAM
