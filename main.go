@@ -22,7 +22,7 @@ var (
 func init() {
 	flag.BoolVar(&flagListProtocols, "list-protocols", false,
 		"list all registered protocols and then exit")
-	flag.BoolVar(&flagUseTransparent, "transparent", true,
+	flag.BoolVar(&flagUseTransparent, "transparent", false,
 		"use transparent proxying (only available on Linux)")
 	flag.Uint16VarP(&flagListenPort, "port", "p", 0,
 		"port to listen on")
